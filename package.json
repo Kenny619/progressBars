@@ -1,0 +1,22 @@
+{
+  "name": "progressbars",
+  "version": "1.0.0",
+  "description": "Display progress-bar(s) on the terminal.",
+  "main": "progressbar.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kenny619/progressBars.git"
+  },
+  "author": "Kenny619",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Kenny619/progressBars/issues"
+  },
+  "homepage": "https://github.com/Kenny619/progressBars#readme",
+  "dependencies": {
+    "readline": "^1.3.0"
+  }
+}
