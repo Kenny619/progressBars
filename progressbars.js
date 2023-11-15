@@ -70,7 +70,7 @@ class Pbars {
    */
   constructor(name, start, end, comment = "", customConfig = Pbars.configObj) {
     if (!process.stdout.isTTY) {
-      // throw new Error("This module requires a TTY to function properly.");
+      throw new Error("This module requires a TTY to function properly.");
     }
 
     //bar parameter id - Identifier in container
@@ -97,7 +97,7 @@ class Pbars {
     //True when abort() is called and.  Changes color on the terminal.
     this.aborted = false;
 
-    //Apply config
+    //Use static configObj preset colors unless custom values are provided
     this.config = {};
     Object.entries(Pbars.configObj).forEach(
       ([key, val]) =>
@@ -121,16 +121,16 @@ class Pbars {
     );
   };
 
+  _getPercenetage = () => {
+    return this._round0((this.now / this.end) * 100);
+  };
+
   /**
    * Generate a progress bar string with a given length and percentage.
    * @param {number} barLength - The length of the progress bar.
    * @param {number} percent - The completion percentage.
    * @returns {string} Returns the generated progress bar string.
    */
-  _getPercenetage = () => {
-    return this._round0((this.now / this.end) * 100);
-  };
-
   _generateBar = (barLength, percent) => {
     const percentPerBar = this._round0(100 / barLength);
     const coloredBar = this._round0(percent / percentPerBar);
@@ -157,10 +157,9 @@ class Pbars {
       aborted: this.aborted,
     };
 
-    //Exit update if getAborted() was called on the bar.
-
     Pbars.container.forEach((obj, index) => {
       if (obj.id === this.id) {
+        //Exit update if getAborted() was called on the bar.
         if (!obj.aborted) {
           Pbars.container[index] = barObj;
         }
