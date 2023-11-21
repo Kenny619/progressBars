@@ -44,19 +44,42 @@ class Pbars {
   /**
    * Set default string and bar color
    */
-  static configObj = {
-    /** ANSI color codes */
-    COLOR_STR_DEFAULT: 231, //#ffffff
-    COLOR_STR_COMPLETED: 247, //#9e9e9e
-    COLOR_STR_ABORTED: 230, //#ffffd7
-    COLOR_BAR_DEFAULT: 82, //#5fff00
-    COLOR_BAR_COMPLETED: 64, //#5f8700
-    COLOR_BAR_ABORTED: 220, //#ffd700
-    SHAPE_BAR_FILLED: "━",
-    SHAPE_BAR_BLANK: " ",
-    STR_TITLE: "PROGRESS:\n",
-    STR_EXIT: "Completed all tasks.  Exiting program.",
+  static cObj = {
+    color: {
+      bar: {
+        default: 82,
+        complete: 64,
+        aborted: 220,
+      },
+      str: {
+        default: 231,
+        completed: 247,
+        aborted: 230,
+      },
+    },
+    barShape: {
+      filled: "━",
+      blank: " ",
+    },
+    string: {
+      title: "PROGRESS:\n",
+      exit: "Completed all tasks.  Exiting program.",
+    },
   };
+  // };
+  // static configObj = {
+  //   /** ANSI color codes */
+  //   COLOR_STR_DEFAULT: 231, //#ffffff
+  //   COLOR_STR_COMPLETED: 247, //#9e9e9e
+  //   COLOR_STR_ABORTED: 230, //#ffffd7
+  //   COLOR_BAR_DEFAULT: 82, //#5fff00
+  //   COLOR_BAR_COMPLETED: 64, //#5f8700
+  //   COLOR_BAR_ABORTED: 220, //#ffd700
+  //   SHAPE_BAR_FILLED: "━",
+  //   SHAPE_BAR_BLANK: " ",
+  //   STR_TITLE: "PROGRESS:\n",
+  //   STR_EXIT: "Completed all tasks.  Exiting program.",
+  // };
 
   /**
    * Create a progress bar.
@@ -92,13 +115,14 @@ class Pbars {
     this.comment = comment;
 
     //Progress in percentage.  this.value / this.end * 100
-    this.percent = 0;
+    this.percent = this._getPercenetage() || 0;
 
     //True when abort() is called and.  Changes color on the terminal.
     this.aborted = false;
 
-    //Use static configObj preset colors unless custom values are provided
+    //Update configObj preset colors if customConfig is provided.
     this.config = {};
+
     Object.entries(Pbars.configObj).forEach(
       ([key, val]) =>
         (this.config[key] =
@@ -131,10 +155,10 @@ class Pbars {
    * @param {number} percent - The completion percentage.
    * @returns {string} Returns the generated progress bar string.
    */
-  _generateBar = (barLength, percent) => {
+  _drawBar = (barLength, percent) => {
     const percentPerBar = this._round0(100 / barLength);
     const coloredBar = this._round0(percent / percentPerBar);
-    const emptyBar = this._round0(barLength - coloredBar);
+    const emptyBar = barLength - coloredBar;
     return Array(coloredBar)
       .fill(this.config.SHAPE_BAR_FILLED)
       .concat(Array(emptyBar).fill(this.config.SHAPE_BAR_BLANK))
@@ -145,33 +169,11 @@ class Pbars {
    * Update the static progress bar container array with the current progress bar information.
    */
   _updateContainer = () => {
-    let idExists = false;
-    const barObj = {
-      id: this.id,
-      name: this.name,
-      start: this.start,
-      end: this.end,
-      now: this.now,
-      comment: this.comment,
-      percent: this._getPercenetage(),
-      aborted: this.aborted,
-    };
+    //Exit process if the bar is already been aborted.
+    if (this.aborted) return;
 
-    Pbars.container.forEach((obj, index) => {
-      if (obj.id === this.id) {
-        //Exit update if getAborted() was called on the bar.
-        if (!obj.aborted) {
-          Pbars.container[index] = barObj;
-        }
-
-        idExists = true;
-      }
-    });
-    if (idExists === false) {
-      if (!barObj.aborted) {
-        Pbars.container.push(barObj);
-      }
-    }
+    const i = Pbars.container.findIndex((entry) => entry.id === this.id);
+    i < 0 ? Pbars.container.push(this) : (Pbars.container[i] = this);
   };
 
   /**
@@ -180,18 +182,15 @@ class Pbars {
    * @param {string} [comment=""] - The status comment for the progress bar.
    * @param {bool} [RenderUpdates] - Set to false if you want to skip rendering.  Default is on true.
    */
-  incrementBar = (value, comment = "", RenderUpdates = true) => {
-    if (this._isCompleted()) {
-      this._exitBar();
-    } else {
-      this.now += value;
-      this.comment = comment;
+  incrementBar = (value, comment = "") => {
+    //Exit if incrementBar was called on already aborted bar
+    if (this.aborted) return;
 
-      this._updateContainer();
-      if (RenderUpdates) {
-        this.render();
-      }
-    }
+    this.now += value;
+    this.comment = comment;
+
+    this._updateContainer();
+    this.render();
   };
 
   /**
@@ -246,9 +245,9 @@ class Pbars {
       barArgs.end
     ).padStart(stepWidth, "0")}) `;
 
-    let bar10 = this._generateBar(10, barArgs.percent);
+    let bar10 = this._drawBar(10, barArgs.percent);
 
-    let bar20 = this._generateBar(20, barArgs.percent);
+    let bar20 = this._drawBar(20, barArgs.percent);
     /** Adjust comment length.  If the comment is longer than a printable space, slice it
      *  and add trailing "...""
      * */
@@ -269,12 +268,12 @@ class Pbars {
       comm = this._color(comm, this.config.COLOR_STR_COMPLETED);
 
       bar10 = this._color(
-        this._generateBar(10, barArgs.percent),
+        this._drawBar(10, barArgs.percent),
         this.config.COLOR_BAR_COMPLETED
       );
 
       bar20 = this._color(
-        this._generateBar(20, barArgs.percent),
+        this._drawBar(20, barArgs.percent),
         this.config.COLOR_BAR_COMPLETED
       );
     } else if (barArgs.aborted) {
@@ -283,11 +282,11 @@ class Pbars {
       chunks = this._color(chunks, this.config.COLOR_STR_ABORTED);
       comm = this._color(comm, this.config.COLOR_STR_ABORTED);
       bar10 = this._color(
-        this._generateBar(10, barArgs.percent),
+        this._drawBar(10, barArgs.percent),
         this.config.COLOR_BAR_ABORTED
       );
       bar20 = this._color(
-        this._generateBar(20, barArgs.percent),
+        this._drawBar(20, barArgs.percent),
         this.config.COLOR_BAR_ABORTED
       );
     } else {
@@ -298,12 +297,12 @@ class Pbars {
       comm = this._color(comm, this.config.COLOR_STR_DEFAULT);
 
       bar10 = this._color(
-        this._generateBar(10, barArgs.percent),
+        this._drawBar(10, barArgs.percent),
         this.config.COLOR_BAR_DEFAULT
       );
 
       bar20 = this._color(
-        this._generateBar(20, barArgs.percent),
+        this._drawBar(20, barArgs.percent),
         this.config.COLOR_BAR_DEFAULT
       );
     }
@@ -344,7 +343,7 @@ class Pbars {
    * Render all progress bars to the console.
    */
   render = () => {
-    /** Exit if there's nothing to print */
+    // Exit if there's nothing to print
     if (Pbars.container.length === 0) return false;
     /** print tilte once */
     if (Pbars.titlePrintedStatus === false) {
@@ -376,12 +375,11 @@ class Pbars {
   };
 
   _exitBar = () => {
-    if (!Pbars.closingPrintedStatus) {
-      process.stdout.write(`\n${this.config.STR_EXIT}\n`);
-      process.stdout.write("\x1B[?25h"); //unhide cursor
-      Pbars.closingPrintedStatus = true;
-      return;
-    }
+    //Output exit message.
+    process.stdout.write(`\n${this.config.STR_EXIT}\n`);
+    //unhide cursor
+    process.stdout.write("\x1B[?25h");
+    return;
   };
 
   /**
@@ -389,25 +387,19 @@ class Pbars {
    */
   // Change the paused status to true.  Indicates whether the progress bar is paused
 
-  abortBar = (comment = "", RenderUpdates = true) => {
+  abortBar = (comment = "") => {
     this.aborted = true;
     this.comment = comment;
     this._updateContainer();
-
-    if (RenderUpdates) {
-      this.render();
-    }
+    this.render();
   };
 
   /**
    * Delete the current progress bar from the container.
    */
   deleteBar = () => {
-    Pbars.container.forEach((entry, index) => {
-      if (entry.id === this.id) {
-        Pbars.container.splice(index, 1);
-      }
-    });
+    const i = Pbars.findIndex((entry) => entry.id === this.id);
+    Pbars.container.splice(i, 1);
   };
 
   /**
