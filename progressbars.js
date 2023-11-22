@@ -123,14 +123,9 @@ class Pbars {
     //Update configObj preset colors if customConfig is provided.
     this.config = {};
 
-    Object.entries(Pbars.configObj).forEach(
-      ([key, val]) =>
-        (this.config[key] =
-          customConfig[key] !== undefined && customConfig[key] !== val
-            ? customConfig[key]
-            : val)
-    );
-
+    if (customConfig) {
+      this.config = this._nestedObjUpdate(Pbars.cObj, customConfig);
+    }
     this._updateContainer();
     this.render();
   }
@@ -140,9 +135,7 @@ class Pbars {
    * @returns {boolean} Returns true if all progress bars are at 100%.
    */
   _isCompleted = () => {
-    return Pbars.container.every(
-      (entry) => entry.percent === 100 || entry.aborted === true
-    );
+    return Pbars.container.every(entry => entry.percent === 100 || entry.aborted === true);
   };
 
   _getPercenetage = () => {
@@ -159,10 +152,7 @@ class Pbars {
     const percentPerBar = this._round0(100 / barLength);
     const coloredBar = this._round0(percent / percentPerBar);
     const emptyBar = barLength - coloredBar;
-    return Array(coloredBar)
-      .fill(this.config.SHAPE_BAR_FILLED)
-      .concat(Array(emptyBar).fill(this.config.SHAPE_BAR_BLANK))
-      .join("");
+    return Array(coloredBar).fill(this.config.SHAPE_BAR_FILLED).concat(Array(emptyBar).fill(this.config.SHAPE_BAR_BLANK)).join("");
   };
 
   /**
@@ -172,8 +162,11 @@ class Pbars {
     //Exit process if the bar is already been aborted.
     if (this.aborted) return;
 
-    const i = Pbars.container.findIndex((entry) => entry.id === this.id);
-    i < 0 ? Pbars.container.push(this) : (Pbars.container[i] = this);
+    const { id, name, start, end, now, comment, percent, aborted, config } = this;
+    const obj = { id, name, start, end, now, comment, percent, aborted, config };
+
+    const i = Pbars.container.findIndex(entry => entry.id === this.id);
+    i < 0 ? Pbars.container.push(obj) : (Pbars.container[i] = obj);
   };
 
   /**
@@ -209,7 +202,7 @@ class Pbars {
    * @param {Object} barArgs - The arguments for the progress bar.
    * @returns {string} Returns the composed output string.
    */
-  _composeOutput = (barArgs) => {
+  _composeOutput = barArgs => {
     //Update the terminal width.
     Pbars.terminalWidth = process.stdout.columns;
 
@@ -220,20 +213,17 @@ class Pbars {
     const LENGTH_PERCENTAGE = 5; // 4 for "000%" and 1 for trailing space.
 
     //Get the longest obj.name in the container and secure the space.
-    const nameColWidth = Math.max(...Pbars.container.map((o) => o.name.length));
+    const nameColWidth = Math.max(...Pbars.container.map(o => o.name.length));
 
     //Get the longest digits of end.
-    const stepWidth = Math.max(
-      ...Pbars.container.map((o) => String(o.end).length)
-    );
+    const stepWidth = Math.max(...Pbars.container.map(o => String(o.end).length));
 
     //width required to output completed steps and total number of steps -> " (now/end)"
     //2 stepWidth for now and end plus 4 = parenthesis, slash, and trailing space.
     const chunkColWidth = stepWidth * 2 + 4;
 
     // PrintMargin is the minimum width required to print the shortest format "name xxx%"
-    const printMargin =
-      Pbars.terminalWidth - (nameColWidth + LENGTH_PERCENTAGE);
+    const printMargin = Pbars.terminalWidth - (nameColWidth + LENGTH_PERCENTAGE);
 
     /** default strings to be rendered
      * adding separating space at the end of each variables.
@@ -241,9 +231,7 @@ class Pbars {
     let name = String(barArgs.name + " ").padStart(nameColWidth, " ");
 
     let percentage = String(barArgs.percent).padStart(3, " ") + "% ";
-    let chunks = `(${String(barArgs.now).padStart(stepWidth, "0")}/${String(
-      barArgs.end
-    ).padStart(stepWidth, "0")}) `;
+    let chunks = `(${String(barArgs.now).padStart(stepWidth, "0")}/${String(barArgs.end).padStart(stepWidth, "0")}) `;
 
     let bar10 = this._drawBar(10, barArgs.percent);
 
@@ -252,14 +240,17 @@ class Pbars {
      *  and add trailing "...""
      * */
     let comm = barArgs.comment;
-    const comLength =
-      printMargin - chunkColWidth - LENGTH_PERCENTAGE - LENGTH_BAR20;
+    const comLength = printMargin - chunkColWidth - LENGTH_PERCENTAGE - LENGTH_BAR20;
     if (comm.length >= comLength) {
-      comm =
-        comm.slice(0, comLength - LENGTH_TRAILING_DOTS) +
-        Array(LENGTH_TRAILING_DOTS).fill(".").join("");
+      comm = comm.slice(0, comLength - LENGTH_TRAILING_DOTS) + Array(LENGTH_TRAILING_DOTS).fill(".").join("");
     }
 
+    /**
+     * 🔧 rewrite coloring section.
+     * 🔧 modulize composeOutput to increase readability.
+     * 🔧 overtake console.  Get the absolute position of cursor after printing the title.
+     * 🔧 make the bar length configurable
+     */
     /** coloring when the bar is at 100% */
     if (barArgs.percent === 100) {
       name = this._color(name, this.config.COLOR_STR_COMPLETED);
@@ -267,44 +258,24 @@ class Pbars {
       chunks = this._color(chunks, this.config.COLOR_STR_COMPLETED);
       comm = this._color(comm, this.config.COLOR_STR_COMPLETED);
 
-      bar10 = this._color(
-        this._drawBar(10, barArgs.percent),
-        this.config.COLOR_BAR_COMPLETED
-      );
+      bar10 = this._color(this._drawBar(10, barArgs.percent), this.config.COLOR_BAR_COMPLETED);
 
-      bar20 = this._color(
-        this._drawBar(20, barArgs.percent),
-        this.config.COLOR_BAR_COMPLETED
-      );
+      bar20 = this._color(this._drawBar(20, barArgs.percent), this.config.COLOR_BAR_COMPLETED);
     } else if (barArgs.aborted) {
       name = this._color(name, this.config.COLOR_STR_ABORTED);
       percentage = this._color(percentage, this.config.COLOR_STR_ABORTED);
       chunks = this._color(chunks, this.config.COLOR_STR_ABORTED);
       comm = this._color(comm, this.config.COLOR_STR_ABORTED);
-      bar10 = this._color(
-        this._drawBar(10, barArgs.percent),
-        this.config.COLOR_BAR_ABORTED
-      );
-      bar20 = this._color(
-        this._drawBar(20, barArgs.percent),
-        this.config.COLOR_BAR_ABORTED
-      );
+      bar10 = this._color(this._drawBar(10, barArgs.percent), this.config.COLOR_BAR_ABORTED);
+      bar20 = this._color(this._drawBar(20, barArgs.percent), this.config.COLOR_BAR_ABORTED);
     } else {
       //default color
       name = this._color(name, this.config.COLOR_STR_DEFAULT);
       percentage = this._color(percentage, this.config.COLOR_STR_DEFAULT);
       chunks = this._color(chunks, this.config.COLOR_STR_DEFAULT);
       comm = this._color(comm, this.config.COLOR_STR_DEFAULT);
-
-      bar10 = this._color(
-        this._drawBar(10, barArgs.percent),
-        this.config.COLOR_BAR_DEFAULT
-      );
-
-      bar20 = this._color(
-        this._drawBar(20, barArgs.percent),
-        this.config.COLOR_BAR_DEFAULT
-      );
+      bar10 = this._color(this._drawBar(10, barArgs.percent), this.config.COLOR_BAR_DEFAULT);
+      bar20 = this._color(this._drawBar(20, barArgs.percent), this.config.COLOR_BAR_DEFAULT);
     }
 
     let output = "";
@@ -348,17 +319,17 @@ class Pbars {
     /** print tilte once */
     if (Pbars.titlePrintedStatus === false) {
       /** Add trailing linechange if there's none */
-      if (!/\n|\r|\r\n$/.test(this.config.STR_TITLE)) {
+      if (!/\n|\r|\r\n$/.test(this.config.string.title)) {
         this.config.STR_TITLE += "\n";
       }
 
       process.stdout.write("\x1B[?25l"); //hide cursor
-      process.stdout.write(this.config.STR_TITLE);
+      process.stdout.write(this.config.string.title);
       Pbars.titlePrintedStatus = true;
     }
 
     /** Print out all the bars stored in Pbars.container */
-    Pbars.container.forEach((entry) => {
+    Pbars.container.forEach(entry => {
       rl.clearLine(process.stdout, 0);
       let output = this._composeOutput(entry);
       process.stdout.write(output);
@@ -398,7 +369,7 @@ class Pbars {
    * Delete the current progress bar from the container.
    */
   deleteBar = () => {
-    const i = Pbars.findIndex((entry) => entry.id === this.id);
+    const i = Pbars.findIndex(entry => entry.id === this.id);
     Pbars.container.splice(i, 1);
   };
 
@@ -407,8 +378,20 @@ class Pbars {
    * @param {float} float - A float to be rounded to an integer
    * @returns {Number} - rounded ineger.
    */
-  _round0 = (float) => {
+  _round0 = float => {
     return Number(Math.round(float + "e" + 0) + "e-" + 0);
+  };
+
+  _nestedObjUpdate = (target, source) => {
+    let tmp = {};
+    Object.keys(target).forEach(key => {
+      if (typeof target[key] === "object" && source.hasOwnProperty(key)) {
+        tmp[key] = this._nestedObjUpdate(target[key], source[key]);
+      } else {
+        tmp[key] = source === undefined || !source.hasOwnProperty(key) ? target[key] : source[key];
+      }
+    });
+    return tmp;
   };
 }
 module.exports = Pbars;
