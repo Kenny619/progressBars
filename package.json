@@ -1,6 +1,6 @@
 {
   "name": "progressbars",
-  "version": "1.0.0",
+  "version": "0.7.0",
   "description": "Display progress-bar(s) on the terminal.",
   "main": "progressbar.js",
   "scripts": {
@@ -10,6 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/Kenny619/progressBars.git"
   },
+  "type": "module",
   "author": "Kenny619",
   "license": "MIT",
   "bugs": {

@@ -1,4 +1,10 @@
-const rl = require("readline");
+"use strict";
+//dependency
+import rl from "readline";
+
+// /lib functions
+import validateConfig from "./lib/validation.js";
+import { nestedObjUpdate, round0 } from "./lib/utility.js";
 
 /**
  * Class representing a console progress bar manager.
@@ -27,12 +33,15 @@ class Pbars {
   static msgContainer = [];
 
   /**
-   * Flag indicating whether the title has been printed.
-   * @static
-   * @type {boolean}
+   * @typedef {Object} StatusObject -
+   * @property {boolean} titlePrint - Indicates whether title printing is enabled.
+   * @property {boolean} closingPrint - Indicates whether closing printing is enabled.
+   * @property {boolean} completed - Indicates whether a task is completed.
    */
-  static titlePrintedStatus = false;
-  static closingPrintedStatus = false;
+  static status = {
+    titlePrint: false,
+    completed: false,
+  };
 
   /**
    * Width of the terminal where the progress bars are displayed.
@@ -47,14 +56,14 @@ class Pbars {
   static cObj = {
     color: {
       bar: {
-        default: 82,
-        complete: 64,
-        aborted: 220,
+        default: 82, //#5fff00
+        completed: 64, //#5f8700
+        aborted: 220, //#ffd700
       },
       str: {
-        default: 231,
-        completed: 247,
-        aborted: 230,
+        default: 231, //#ffffff
+        completed: 247, //#9e9e9e
+        aborted: 214, //#ffaf00
       },
     },
     barShape: {
@@ -63,23 +72,9 @@ class Pbars {
     },
     string: {
       title: "PROGRESS:\n",
-      exit: "Completed all tasks.  Exiting program.",
+      closing: "Completed all tasks.  Exiting program.",
     },
   };
-  // };
-  // static configObj = {
-  //   /** ANSI color codes */
-  //   COLOR_STR_DEFAULT: 231, //#ffffff
-  //   COLOR_STR_COMPLETED: 247, //#9e9e9e
-  //   COLOR_STR_ABORTED: 230, //#ffffd7
-  //   COLOR_BAR_DEFAULT: 82, //#5fff00
-  //   COLOR_BAR_COMPLETED: 64, //#5f8700
-  //   COLOR_BAR_ABORTED: 220, //#ffd700
-  //   SHAPE_BAR_FILLED: "━",
-  //   SHAPE_BAR_BLANK: " ",
-  //   STR_TITLE: "PROGRESS:\n",
-  //   STR_EXIT: "Completed all tasks.  Exiting program.",
-  // };
 
   /**
    * Create a progress bar.
@@ -123,14 +118,9 @@ class Pbars {
     //Update configObj preset colors if customConfig is provided.
     this.config = {};
 
-    Object.entries(Pbars.configObj).forEach(
-      ([key, val]) =>
-        (this.config[key] =
-          customConfig[key] !== undefined && customConfig[key] !== val
-            ? customConfig[key]
-            : val)
-    );
-
+    if (validateConfig(customConfig)) {
+      this.config = nestedObjUpdate(Pbars.cObj, customConfig);
+    }
     this._updateContainer();
     this.render();
   }
@@ -140,13 +130,15 @@ class Pbars {
    * @returns {boolean} Returns true if all progress bars are at 100%.
    */
   _isCompleted = () => {
-    return Pbars.container.every(
-      (entry) => entry.percent === 100 || entry.aborted === true
-    );
+    if (Pbars.container.length > 0) {
+      return Pbars.container.every(entry => entry.percent === 100 || entry.aborted === true);
+    } else {
+      return false;
+    }
   };
 
   _getPercenetage = () => {
-    return this._round0((this.now / this.end) * 100);
+    return round0((this.now / this.end) * 100);
   };
 
   /**
@@ -156,41 +148,68 @@ class Pbars {
    * @returns {string} Returns the generated progress bar string.
    */
   _drawBar = (barLength, percent) => {
-    const percentPerBar = this._round0(100 / barLength);
-    const coloredBar = this._round0(percent / percentPerBar);
+    const percentPerBar = round0(100 / barLength);
+    const coloredBar = round0(percent / percentPerBar);
     const emptyBar = barLength - coloredBar;
-    return Array(coloredBar)
-      .fill(this.config.SHAPE_BAR_FILLED)
-      .concat(Array(emptyBar).fill(this.config.SHAPE_BAR_BLANK))
-      .join("");
+
+    return Array(coloredBar).fill(this.config.barShape.filled).concat(Array(emptyBar).fill(this.config.barShape.blank)).join("");
   };
 
   /**
    * Update the static progress bar container array with the current progress bar information.
    */
   _updateContainer = () => {
-    //Exit process if the bar is already been aborted.
-    if (this.aborted) return;
+    //Exit process if the bar instance is already completed.
 
-    const i = Pbars.container.findIndex((entry) => entry.id === this.id);
-    i < 0 ? Pbars.container.push(this) : (Pbars.container[i] = this);
+    const { id, name, start, end, now, comment, percent, aborted, config } = this;
+    const obj = { id, name, start, end, now, comment, percent, aborted, config };
+    obj.percent = this._getPercenetage();
+
+    const i = Pbars.container.findIndex(entry => entry.id === this.id);
+    i < 0 ? Pbars.container.push(obj) : (Pbars.container[i] = obj);
   };
 
   /**
    * Increment the progress of the current progress bar.
    * @param {number} value - The increment value.
    * @param {string} [comment=""] - The status comment for the progress bar.
-   * @param {bool} [RenderUpdates] - Set to false if you want to skip rendering.  Default is on true.
    */
   incrementBar = (value, comment = "") => {
     //Exit if incrementBar was called on already aborted bar
-    if (this.aborted) return;
+    if (this.percent === 100 || this.aborted === true || Pbars.status.completed) {
+      return;
+    }
 
     this.now += value;
     this.comment = comment;
-
     this._updateContainer();
     this.render();
+  };
+
+  /**
+   * Changes the color of the bar to aborted status and blocks all future update to the bar.
+   * @param {string} [comment=""] - The status comment for the progress bar.
+   */
+  abortBar = (comment = "") => {
+    if (this.percent === 100 || this.aborted === true || Pbars.status.completed) {
+      return;
+    }
+    this.aborted = true;
+    this.comment = comment;
+    this._updateContainer();
+    this.render();
+  };
+
+  /**
+   * Delete the current progress bar from the container.
+   */
+  deleteBar = () => {
+    if (Pbars.status.completed) {
+      console.warn(`⚡ This instance of the bar is already completed.  Please create a new instance.`);
+      return;
+    }
+    const i = Pbars.findIndex(entry => entry.id === this.id);
+    Pbars.container.splice(i, 1);
   };
 
   /**
@@ -198,7 +217,7 @@ class Pbars {
    * @param {string} string - The input string.
    * @param {number} ANSIcolorNumber - The ANSI color code.
    * @returns {string} Returns the input string wrapped in ANSI color code.
-   * @see {@link https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit|ANSI color codes}
+   * @see {@link https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit 8bit ANSI COLOR codes}
    */
   _color = (string, ANSIcolorNumber) => {
     return `\x1b[38;5;${ANSIcolorNumber}m${string}\x1b[0m`;
@@ -209,7 +228,7 @@ class Pbars {
    * @param {Object} barArgs - The arguments for the progress bar.
    * @returns {string} Returns the composed output string.
    */
-  _composeOutput = (barArgs) => {
+  _composeOutput = barArgs => {
     //Update the terminal width.
     Pbars.terminalWidth = process.stdout.columns;
 
@@ -220,118 +239,69 @@ class Pbars {
     const LENGTH_PERCENTAGE = 5; // 4 for "000%" and 1 for trailing space.
 
     //Get the longest obj.name in the container and secure the space.
-    const nameColWidth = Math.max(...Pbars.container.map((o) => o.name.length));
+    const nameColWidth = Math.max(...Pbars.container.map(o => o.name.length));
 
     //Get the longest digits of end.
-    const stepWidth = Math.max(
-      ...Pbars.container.map((o) => String(o.end).length)
-    );
+    const stepWidth = Math.max(...Pbars.container.map(o => String(o.end).length));
 
     //width required to output completed steps and total number of steps -> " (now/end)"
     //2 stepWidth for now and end plus 4 = parenthesis, slash, and trailing space.
     const chunkColWidth = stepWidth * 2 + 4;
 
     // PrintMargin is the minimum width required to print the shortest format "name xxx%"
-    const printMargin =
-      Pbars.terminalWidth - (nameColWidth + LENGTH_PERCENTAGE);
+    const printMargin = Pbars.terminalWidth - (nameColWidth + LENGTH_PERCENTAGE);
 
     /** default strings to be rendered
      * adding separating space at the end of each variables.
      */
-    let name = String(barArgs.name + " ").padStart(nameColWidth, " ");
+    let name = barArgs.name.padStart(nameColWidth, " ") + " ";
 
     let percentage = String(barArgs.percent).padStart(3, " ") + "% ";
-    let chunks = `(${String(barArgs.now).padStart(stepWidth, "0")}/${String(
-      barArgs.end
-    ).padStart(stepWidth, "0")}) `;
+    let chunks = `(${String(barArgs.now).padStart(stepWidth, "0")}/${String(barArgs.end).padStart(stepWidth, "0")}) `;
 
     let bar10 = this._drawBar(10, barArgs.percent);
-
     let bar20 = this._drawBar(20, barArgs.percent);
-    /** Adjust comment length.  If the comment is longer than a printable space, slice it
-     *  and add trailing "...""
-     * */
+
+    //Adjust comment length.  If the comment is longer than a printable space, slice it and add trailing "..."
     let comm = barArgs.comment;
-    const comLength =
-      printMargin - chunkColWidth - LENGTH_PERCENTAGE - LENGTH_BAR20;
+    const comLength = printMargin - chunkColWidth - LENGTH_PERCENTAGE - LENGTH_BAR20;
     if (comm.length >= comLength) {
-      comm =
-        comm.slice(0, comLength - LENGTH_TRAILING_DOTS) +
-        Array(LENGTH_TRAILING_DOTS).fill(".").join("");
+      comm = comm.slice(0, comLength - LENGTH_TRAILING_DOTS) + Array(LENGTH_TRAILING_DOTS).fill(".").join("");
     }
 
-    /** coloring when the bar is at 100% */
-    if (barArgs.percent === 100) {
-      name = this._color(name, this.config.COLOR_STR_COMPLETED);
-      percentage = this._color(percentage, this.config.COLOR_STR_COMPLETED);
-      chunks = this._color(chunks, this.config.COLOR_STR_COMPLETED);
-      comm = this._color(comm, this.config.COLOR_STR_COMPLETED);
+    /**
+     * 🔧 overtake console.  Get the absolute position of cursor after printing the title.
+     * 🔧 make the bar length configurable
+     */
 
-      bar10 = this._color(
-        this._drawBar(10, barArgs.percent),
-        this.config.COLOR_BAR_COMPLETED
-      );
+    //Apply this.config color values to strings and bar based on the status i.e. completed/aborted/default = others
+    const strPart = [name, percentage, chunks, comm];
+    const barPart = [bar10, bar20];
+    const status = barArgs.percent === 100 ? "completed" : barArgs.aborted ? "aborted" : "default";
+    strPart.forEach((entry, index) => (strPart[index] = this._color(entry, barArgs.config.color.str[status])));
+    barPart.forEach((entry, index) => (barPart[index] = this._color(entry, barArgs.config.color.bar[status])));
 
-      bar20 = this._color(
-        this._drawBar(20, barArgs.percent),
-        this.config.COLOR_BAR_COMPLETED
-      );
-    } else if (barArgs.aborted) {
-      name = this._color(name, this.config.COLOR_STR_ABORTED);
-      percentage = this._color(percentage, this.config.COLOR_STR_ABORTED);
-      chunks = this._color(chunks, this.config.COLOR_STR_ABORTED);
-      comm = this._color(comm, this.config.COLOR_STR_ABORTED);
-      bar10 = this._color(
-        this._drawBar(10, barArgs.percent),
-        this.config.COLOR_BAR_ABORTED
-      );
-      bar20 = this._color(
-        this._drawBar(20, barArgs.percent),
-        this.config.COLOR_BAR_ABORTED
-      );
-    } else {
-      //default color
-      name = this._color(name, this.config.COLOR_STR_DEFAULT);
-      percentage = this._color(percentage, this.config.COLOR_STR_DEFAULT);
-      chunks = this._color(chunks, this.config.COLOR_STR_DEFAULT);
-      comm = this._color(comm, this.config.COLOR_STR_DEFAULT);
-
-      bar10 = this._color(
-        this._drawBar(10, barArgs.percent),
-        this.config.COLOR_BAR_DEFAULT
-      );
-
-      bar20 = this._color(
-        this._drawBar(20, barArgs.percent),
-        this.config.COLOR_BAR_DEFAULT
-      );
-    }
+    [name, percentage, chunks, comm] = strPart;
+    [bar10, bar20] = barPart;
 
     let output = "";
     /** Exit if the terminal width is 0 */
     if (printMargin < 0) {
       throw new Error("Terminal too small...");
 
-      /** Print name and percentage.
-       * format => "name xxx%""
-       * */
+      //Print name and percentage. format => "name xxx%"
     } else if (printMargin < chunkColWidth) {
       output = `${name}${percentage}%\n`;
 
-      /** Print name, percentage, and chunks.
-       * format => "name xxx% (now/end)"
-       *  */
+      //Print name, percentage, and chunks.  format => "name xxx% (now/end)"
     } else if (printMargin < chunkColWidth + LENGTH_BAR10) {
       output = `${name}${percentage}${chunks}\n`;
 
-      /** Print name, 10-length-bar, percentage, and chunks.
-       * format => "name:bar(10) xxx% (now/end)"
-       * 22 = bar(20), 4 = first letter of comment + ...
-       */
+      //Print name, 10-length-bar, percentage, and chunks. format => "name:bar(10) xxx% (now/end)"
     } else if (printMargin < chunkColWidth + LENGTH_BAR20) {
       output = `${name}${bar10} ${percentage}${chunks}\n`;
 
-      /** name: bar(20) xxx% (now/end) comment... */
+      //Print all components.  format => "name: bar(20) xxx% (now/end) comment..."
     } else {
       output = `${name}${bar20} ${percentage}${chunks}${comm}\n`;
     }
@@ -343,22 +313,25 @@ class Pbars {
    * Render all progress bars to the console.
    */
   render = () => {
+    //if (this._isCompleted()) return;
+
     // Exit if there's nothing to print
-    if (Pbars.container.length === 0) return false;
+    if (Pbars.container.length === 0) return;
+
     /** print tilte once */
-    if (Pbars.titlePrintedStatus === false) {
+    if (Pbars.status.titlePrint === false) {
       /** Add trailing linechange if there's none */
-      if (!/\n|\r|\r\n$/.test(this.config.STR_TITLE)) {
+      if (!/\n|\r|\r\n$/.test(this.config.string.title)) {
         this.config.STR_TITLE += "\n";
       }
 
       process.stdout.write("\x1B[?25l"); //hide cursor
-      process.stdout.write(this.config.STR_TITLE);
-      Pbars.titlePrintedStatus = true;
+      process.stdout.write(this.config.string.title);
+      Pbars.status.titlePrint = true;
     }
 
     /** Print out all the bars stored in Pbars.container */
-    Pbars.container.forEach((entry) => {
+    Pbars.container.forEach(entry => {
       rl.clearLine(process.stdout, 0);
       let output = this._composeOutput(entry);
       process.stdout.write(output);
@@ -369,46 +342,29 @@ class Pbars {
     } else {
       /** move cursor back to the starting line of stdout */
       //    const NumPrintedLines = Pbars.container.length - 1;
-
       rl.moveCursor(process.stdout, 0, 0 - Pbars.container.length);
     }
   };
 
   _exitBar = () => {
     //Output exit message.
-    process.stdout.write(`\n${this.config.STR_EXIT}\n`);
+    process.stdout.write(`\n${this.config.string.closing}\n`);
     //unhide cursor
     process.stdout.write("\x1B[?25h");
+
+    Pbars.status.closingPrint = true;
+    Pbars.status.completed = true;
     return;
   };
 
-  /**
-   * Pause the current progress bar.  Changes the color of the bar.
-   */
-  // Change the paused status to true.  Indicates whether the progress bar is paused
-
-  abortBar = (comment = "") => {
-    this.aborted = true;
-    this.comment = comment;
-    this._updateContainer();
-    this.render();
-  };
-
-  /**
-   * Delete the current progress bar from the container.
-   */
-  deleteBar = () => {
-    const i = Pbars.findIndex((entry) => entry.id === this.id);
-    Pbars.container.splice(i, 1);
-  };
-
-  /**
-   * Utility function for rounding a float to integer
-   * @param {float} float - A float to be rounded to an integer
-   * @returns {Number} - rounded ineger.
-   */
-  _round0 = (float) => {
-    return Number(Math.round(float + "e" + 0) + "e-" + 0);
+  reset = () => {
+    if (!Pbars.status.completed) {
+      throw new Error(`Exisitng instances are still running.`);
+    }
+    Pbars.container = [];
+    Pbars.status.titlePrint = false;
+    Pbars.status.completed = false;
   };
 }
-module.exports = Pbars;
+
+export default Pbars;
