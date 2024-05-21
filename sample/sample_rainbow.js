@@ -1,9 +1,17 @@
 "use strict";
 import Pbars from "../progressbars.js";
 
-const colorNames = ["red", "oragen", "yellow", "green", "blue", "indigo", "purple"];
+const colorNames = [
+  "red",
+  "oragen",
+  "yellow",
+  "green",
+  "blue",
+  "indigo",
+  "purple",
+];
 const colorDefault = [9, 214, 11, 10, 21, 12, 13];
-const colorCompleted = [1, 172, 255, 2, 4, 18, 5];
+const colorCompleted = [88, 100, 106, 2, 103, 98, 90];
 const customTemplate = {
   color: {
     bar: {
@@ -28,7 +36,7 @@ const initialize = () => {
   }
 };
 
-const updateBar = bar => {
+const updateBar = (bar) => {
   const timeout = Math.round(Math.random() * 4000);
   setTimeout(() => {
     if (timeout % 69 === 0) {
@@ -39,9 +47,9 @@ const updateBar = bar => {
   }, timeout);
 };
 
-const run = rainbows => {
+const run = (rainbows) => {
   for (let i = 0; i < steps; i++) {
-    rainbows.forEach(bar => {
+    rainbows.forEach((bar) => {
       updateBar(bar);
     });
   }
